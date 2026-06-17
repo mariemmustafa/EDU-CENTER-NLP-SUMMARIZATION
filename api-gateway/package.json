@@ -1,0 +1,25 @@
+{
+  "name": "summarization-api-gateway",
+  "version": "1.0.0",
+  "description": "API Gateway for Text Summarization Platform",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.0",
+    "express": "^4.21.0",
+    "express-rate-limit": "^8.3.0",
+    "express-validator": "^7.2.0",
+    "form-data": "^4.0.5",
+    "helmet": "^8.0.0",
+    "multer": "^1.4.5-lts.1",
+    "officeparser": "^4.0.8",
+    "pdf-parse": "^1.1.1",
+    "uuid": "^10.0.0",
+    "winston": "^3.14.0"
+  }
+}

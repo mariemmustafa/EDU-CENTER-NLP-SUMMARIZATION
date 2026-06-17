@@ -1,0 +1,57 @@
+services:
+  api-gateway:
+    build: ./api-gateway
+    container_name: summarization-gateway
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NLP_SERVICE_URL=http://nlp-service:8000
+      - MAX_FILE_SIZE_MB=10
+      - LOG_LEVEL=info
+      - REQUEST_TIMEOUT_MS=120000
+      - NODE_ENV=development
+      - ALLOWED_ORIGINS=*
+      - API_KEY=
+      - RATE_LIMIT_WINDOW_MS=60000
+      - RATE_LIMIT_MAX=30
+    depends_on:
+      nlp-service:
+        condition: service_healthy
+    networks:
+      - summarization-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  nlp-service:
+    build: ./nlp-service
+    container_name: summarization-nlp
+    ports:
+      - "8000:8000"
+    environment:
+      - SUMMARIZATION_PROVIDER=huggingface
+      - HUGGINGFACE_MODEL=Falconsai/text_summarization
+      - MULTILINGUAL_HUGGINGFACE_MODEL=csebuetnlp/mT5_multilingual_XLSum
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - HOST=0.0.0.0
+      - PORT=8000
+      - LOG_LEVEL=info
+      - MAX_INPUT_LENGTH=50000
+    networks:
+      - summarization-net
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+networks:
+  summarization-net:
+    driver: bridge
