@@ -106,3 +106,14 @@ API_KEY=your-secret-key bash deploy.sh prod
 ```
 
 Ensure that your `SUMMARIZATION_PROVIDER` and `OPENAI_API_KEY` are properly configured in `.env` if utilizing OpenAI for production fallback or Arabic text summarization.
+## Daily Run Commands (After Setup)
+
+Every time you run the project:
+
+```bash
+cd nlp-service
+venv\Scripts\activate
+python -m uvicorn main:app --reload
+http://127.0.0.1:8000/docs
+
+```

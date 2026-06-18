@@ -75,13 +75,13 @@ class HuggingFaceProvider(SummarizationProvider):
         with torch.no_grad():
             summary_ids = self._model.generate(
                 inputs["input_ids"],
-                max_length=150,
-                min_length=40,
-                num_beams=4,
-                length_penalty=2.0,
+                max_length=250,
+                min_length=80,
+                num_beams=5,
+                length_penalty=1.0,
                 early_stopping=True,
                 do_sample=False,  # deterministic output
-                repetition_penalty=1.2,
+                repetition_penalty=1.3,
                 no_repeat_ngram_size=3,
             )
 

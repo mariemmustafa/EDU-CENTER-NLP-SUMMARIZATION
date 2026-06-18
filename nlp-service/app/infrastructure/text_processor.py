@@ -43,8 +43,8 @@ def chunk_text(text: str, max_tokens: int = 500, overlap: int = 20, analysis: di
     """
     if analysis:
         if analysis["complexity"] == "high":
-            max_tokens = min(max_tokens, 300)
-            overlap = min(overlap, 50)
+            max_tokens = min(max_tokens, 500)
+            overlap = min(overlap, 30)
         elif analysis["complexity"] == "low":
             max_tokens = max(max_tokens, 600)
 

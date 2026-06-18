@@ -74,7 +74,7 @@ class SummarizationService:
         merged = merge_summaries(summaries)
 
         # If we had many chunks, do a final condensation pass
-        if len(chunks) >= 3 and len(merged) > 1000:
+        if len(chunks) >= 8 and len(merged) > 3000:
             logger.info(
                 "Running condensation pass on merged summaries",
                 extra={"request_id": request_id},
