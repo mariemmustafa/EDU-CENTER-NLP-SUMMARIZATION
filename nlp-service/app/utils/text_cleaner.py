@@ -2,6 +2,7 @@
 Post-processing text cleanup for summarization output.
 
 Removes hallucinated repetitions, corrupted tokens, duplicate sentences,
+quote artifacts, Arabic temporal hallucinations, formatting leftovers,
 and normalises whitespace — without altering the semantic content.
 """
 
@@ -102,7 +103,67 @@ def _normalise_whitespace(text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# 5. Quality detection
+# 5. Output artifact cleanup (NEW — post-processing only)
+# ---------------------------------------------------------------------------
+
+# 5a. Empty or duplicated quotation marks
+#     Matches: "", '', «», \u201c\u201d, or quotes with only whitespace inside
+_EMPTY_QUOTES = re.compile(
+    r'[\u201c\u201d\u00ab\u00bb]{2}'
+    r'|[\u201c\u00ab]\s*[\u201d\u00bb]'
+    r'|""'
+    r"|''"
+)
+
+# 5b. Arabic hallucinated temporal / transition filler phrases
+#     Only fires when TWO OR MORE of these phrases appear back-to-back
+#     (a single occurrence is legitimate and kept).
+_AR_TEMPORAL_PHRASES = (
+    r'في الوقت الحالي'
+    r'|في الوقت نفسه'
+    r'|على صعيد آخر'
+    r'|من جهة أخرى'
+    r'|بالإضافة إلى ذلك'
+)
+_AR_TEMPORAL_HALLUCINATIONS = re.compile(
+    r'(?:' + _AR_TEMPORAL_PHRASES + r')'
+    r'(?:[،,]\s*(?:' + _AR_TEMPORAL_PHRASES + r'))+'
+)
+
+# 5c. Orphan section numbers on their own line (e.g. "1." or "2.3.")
+_ORPHAN_SECTION_NUMBERS = re.compile(r'^\s*(?:\d+\.)+\s*$', re.MULTILINE)
+
+# 5d. Exact consecutive duplicate lines (typically duplicated headings)
+_DUPLICATED_LINES = re.compile(r'^(.+)\n\1$', re.MULTILINE)
+
+# 5e. Repeated multi-word phrases (3-8 words repeated 2+ times consecutively)
+_REPEATED_PHRASE = re.compile(r'((?:\S+\s+){2,7}\S+)(?:\s+\1)+')
+
+
+def _remove_quote_artifacts(text: str) -> str:
+    """Remove empty or whitespace-only quotation mark pairs."""
+    return _EMPTY_QUOTES.sub('', text)
+
+
+def _remove_arabic_temporal_hallucinations(text: str) -> str:
+    """Collapse chained Arabic temporal filler phrases, keeping one instance."""
+    return _AR_TEMPORAL_HALLUCINATIONS.sub(lambda m: m.group().split('،')[0].split(',')[0].strip(), text)
+
+
+def _remove_formatting_artifacts(text: str) -> str:
+    """Remove orphan section numbers and collapse duplicated lines."""
+    text = _ORPHAN_SECTION_NUMBERS.sub('', text)
+    text = _DUPLICATED_LINES.sub(r'\1', text)
+    return text
+
+
+def _remove_repeated_phrases(text: str) -> str:
+    """Collapse multi-word phrases repeated consecutively."""
+    return _REPEATED_PHRASE.sub(r'\1', text)
+
+
+# ---------------------------------------------------------------------------
+# 6. Quality detection
 # ---------------------------------------------------------------------------
 
 def has_excessive_repetition(text: str) -> bool:
@@ -151,7 +212,8 @@ def clean_summary(text: str) -> str:
     1. Remove repeated character patterns
     2. Remove repeated consecutive words
     3. Remove duplicate sentences
-    4. Normalise whitespace
+    4. Remove output artifacts (quotes, Arabic temporal, formatting, phrases)
+    5. Normalise whitespace
     """
     if not text:
         return text
@@ -161,6 +223,13 @@ def clean_summary(text: str) -> str:
     text = _remove_repeated_char_patterns(text)
     text = _remove_repeated_words(text)
     text = _remove_duplicate_sentences(text)
+
+    # ── NEW: output artifact cleanup (reversible — remove these 4 lines to roll back) ──
+    text = _remove_quote_artifacts(text)
+    text = _remove_arabic_temporal_hallucinations(text)
+    text = _remove_formatting_artifacts(text)
+    text = _remove_repeated_phrases(text)
+
     text = _normalise_whitespace(text)
 
     cleaned_len = len(text)
