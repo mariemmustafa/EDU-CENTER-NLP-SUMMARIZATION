@@ -6,6 +6,7 @@ from app.config import settings
 from app.infrastructure.text_processor import chunk_text, merge_summaries
 from app.utils.exceptions import ProviderError
 from app.utils.logger import get_logger
+from app.utils.text_cleaner import clean_summary, has_excessive_repetition
 
 logger = get_logger(__name__)
 
@@ -80,11 +81,62 @@ class SummarizationService:
                 extra={"request_id": request_id},
             )
             merged = await self._call_with_routing(merged, request_id, lang, analysis)
-            
+
+        # --- Post-processing cleanup ---
+        merged = clean_summary(merged)
+
+        # --- Quality validation: regenerate once if corrupted ---
+        if has_excessive_repetition(merged):
+            logger.warning(
+                "Summary has excessive repetition after cleanup, attempting safe regeneration",
+                extra={"request_id": request_id},
+            )
+            merged = await self._safe_regenerate(text, request_id, lang, analysis, merged)
+
         process_time = round(time.time() - start_time, 2)
         logger.info(f"Summarization pipeline completed in {process_time}s", extra={"request_id": request_id})
 
         return merged
+
+    async def _safe_regenerate(
+        self, original_text: str, request_id: str, lang: str, analysis: dict, fallback_text: str
+    ) -> str:
+        """
+        Attempt a single regeneration with stricter parameters.
+        If the provider supports summarize_safe, use it; otherwise return fallback_text.
+        """
+        try:
+            # Determine the provider that would handle this text
+            is_arabic = lang == "ar"
+            if is_arabic:
+                multilingual_hf = None
+                if self._get_multilingual_hf is not None:
+                    multilingual_hf = await self._get_multilingual_hf()
+                provider, _ = self._resolve_arabic_providers(multilingual_hf)
+            else:
+                provider = self._primary
+
+            # Use safe regeneration if available
+            if hasattr(provider, 'summarize_safe'):
+                logger.info("Using safe regeneration path", extra={"request_id": request_id})
+                result = await provider.summarize_safe(original_text, lang)
+                result = clean_summary(result)
+                if result and len(result) >= 20 and not has_excessive_repetition(result):
+                    logger.info("Safe regeneration produced clean output", extra={"request_id": request_id})
+                    return result
+
+            logger.warning(
+                "Safe regeneration did not improve quality, keeping cleaned output",
+                extra={"request_id": request_id},
+            )
+            return fallback_text
+
+        except Exception as e:
+            logger.warning(
+                f"Safe regeneration failed: {e}, keeping cleaned output",
+                extra={"request_id": request_id},
+            )
+            return fallback_text
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -125,23 +177,22 @@ class SummarizationService:
         text_type = analysis.get("type", "general")
         complexity = analysis.get("complexity", "low")
 
-        multilingual_hf = None
-        if self._get_multilingual_hf is not None:
-            multilingual_hf = await self._get_multilingual_hf()
-
         if is_arabic:
             # Arabic: OpenAI primary, HF fallback
+            multilingual_hf = None
+            if self._get_multilingual_hf is not None:
+                multilingual_hf = await self._get_multilingual_hf()
             primary, fallbacks = self._resolve_arabic_providers(multilingual_hf)
         else:
             # English / other
             if text_type == "math/scientific" or complexity == "high":
                 # Complex/Math: OpenAI primary, HF fallback
                 primary = self._openai if self._openai else self._primary
-                fallbacks = [self._primary] if self._openai else [multilingual_hf]
+                fallbacks = [self._primary] if self._openai else []
             else:
-                # General simple: HF primary, OpenAI fallback, then multilingual
+                # General simple: HF primary, OpenAI fallback
                 primary = self._primary
-                fallbacks = [self._openai, multilingual_hf]
+                fallbacks = [self._openai]
 
         # Clean None values from fallbacks
         fallbacks = [f for f in fallbacks if f is not None and f is not primary]
@@ -227,6 +278,11 @@ class SummarizationService:
                 if not cleaned or len(cleaned) < 20:
                     raise ProviderError("all", f"Provider returned empty or too short text (<20 chars).")
                 
+                # Length Check Fallback
+                if len(cleaned) > len(text):
+                    logger.warning("Summary longer than input, falling back to original text.", extra={"request_id": request_id})
+                    cleaned = text
+                    
                 # Extremely low diversity check
                 if len(set(cleaned)) < 10:
                     raise ProviderError("all", f"Provider returned meaningless/repeating text (low diversity).")
@@ -235,9 +291,14 @@ class SummarizationService:
                 words = cleaned.split()
                 if words and len(words) > 10:
                     unique_words = set(words)
-                    if len(unique_words) / len(words) < 0.2:
+                    if len(unique_words) / len(words) < 0.3:
                         raise ProviderError("all", "Provider returned meaningless/repeating text (word repetition).")
                     
+                # Apply post-processing cleanup on individual chunk results
+                cleaned = clean_summary(cleaned)
+                if not cleaned or len(cleaned) < 20:
+                    raise ProviderError("all", "Provider returned empty text after post-processing cleanup.")
+
                 self._last_result = cleaned
                 logger.info(f"{label} provider succeeded in {call_time}s", extra={"request_id": request_id})
                 return None  # success

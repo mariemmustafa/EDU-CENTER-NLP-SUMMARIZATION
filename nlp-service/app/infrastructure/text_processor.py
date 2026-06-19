@@ -14,7 +14,7 @@ def analyze_text(text: str) -> dict:
     words = text.split()
     word_count = len(words)
     
-    if word_count == 0:
+    if word_count == 0 or word_count < 100:
         return {"complexity": "low", "type": "general"}
         
     sentences = _SENTENCE_END.split(text)
@@ -46,7 +46,7 @@ def chunk_text(text: str, max_tokens: int = 500, overlap: int = 20, analysis: di
             max_tokens = min(max_tokens, 500)
             overlap = min(overlap, 30)
         elif analysis["complexity"] == "low":
-            max_tokens = max(max_tokens, 600)
+            max_tokens = max(max_tokens, 800)
 
     words = text.split()
     if len(words) <= max_tokens:

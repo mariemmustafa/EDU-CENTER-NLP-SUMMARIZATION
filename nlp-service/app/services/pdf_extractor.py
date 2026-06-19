@@ -37,6 +37,14 @@ def extract_text(
             page = doc[i]
             # PyMuPDF extracts text including RTL properly. sort=True improves reading order in mixed/noisy PDFs.
             page_text = page.get_text("text", sort=True)
+            
+            # Fallback extraction
+            if not page_text or len(page_text.strip()) < 50:
+                blocks = page.get_text("blocks")
+                if blocks:
+                    blocks.sort(key=lambda b: (b[1], b[0]))
+                    page_text = "\n".join([b[4] for b in blocks if len(b) >= 5 and isinstance(b[4], str) and b[4].strip()])
+
             if page_text:
                 raw_parts.append(page_text)
 
@@ -49,9 +57,18 @@ def extract_text(
         return ""
 
     cleaned = clean_text(raw_text)
-    logger.info(
-        f"Extracted {len(cleaned)} chars from pages {start_idx + 1}-{end_idx}"
-    )
+    
+    num_pages = end_idx - start_idx
+    num_chars = len(cleaned)
+    num_words = len(cleaned.split())
+    preview = cleaned[:300].replace('\n', ' ')
+    
+    logger.info(f"Extracted {num_chars} characters and {num_words} words from {num_pages} pages")
+    logger.info(f"Extraction preview: {preview}...")
+    
+    if num_pages >= 5 and num_chars < num_pages * 200:
+        logger.warning("Low extraction quality detected")
+
     return cleaned
 
 
@@ -80,18 +97,14 @@ def clean_text(raw: str) -> str:
     text = re.sub(r"(?im)^\s*(page|p\.)\s*\d+\s*$", "", text)
     text = re.sub(r"(?im)^\s*\d+\s*$", "", text)
 
-    # 5. Remove duplicated lines (headings, formulas, repeated headers)
+    # 5. Remove exact duplicated consecutive lines
     lines = text.split("\n")
-    if len(lines) > 5:
-        text = _remove_duplicated_lines(lines)
+    text = _remove_duplicated_lines(lines)
 
-    # 6. Remove OCR noise (e.g. repeated single characters 'a a a a a')
-    text = re.sub(r"(?i)(?:([a-z\u0600-\u06FF])\s+)(?=\1\s+){4,}", "", text)
-
-    # 7. Collapse multiple blank lines into one
+    # 6. Collapse multiple blank lines into one
     text = re.sub(r"\n{3,}", "\n\n", text)
 
-    # 8. Collapse multiple spaces
+    # 7. Collapse multiple spaces
     text = re.sub(r" {2,}", " ", text)
 
     return text.strip()
@@ -99,14 +112,8 @@ def clean_text(raw: str) -> str:
 
 def _remove_duplicated_lines(lines: list[str]) -> str:
     """
-    Remove lines that appear consecutively or are repeated too often
-    across the document to filter out repeated headings and formulas.
+    Remove lines that appear consecutively.
     """
-    from collections import Counter
-
-    stripped = [line.strip() for line in lines]
-    counts = Counter(s for s in stripped if len(s) > 10)  # Only count substantial lines
-
     cleaned = []
     prev_line = None
     
@@ -115,11 +122,6 @@ def _remove_duplicated_lines(lines: list[str]) -> str:
         
         # Remove consecutive duplicates
         if s == prev_line and len(s) > 0:
-            continue
-            
-        # Remove lines that are heavily repeated across the doc (e.g. >3 times)
-        # unless they are very short (might be generic formatting)
-        if len(s) > 15 and counts[s] > 3:
             continue
             
         cleaned.append(line)

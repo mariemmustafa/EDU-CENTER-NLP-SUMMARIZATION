@@ -7,7 +7,9 @@ from app.application.use_cases import SummarizeDocumentUseCase
 class MockPage:
     def __init__(self, text):
         self._text = text
-    def get_text(self, *args, **kwargs):
+    def get_text(self, extraction_type="text", *args, **kwargs):
+        if extraction_type == "blocks":
+            return [(0, 0, 10, 10, self._text, 0, 0)]
         return self._text
 
 class MockDoc:
@@ -22,9 +24,10 @@ def test_clean_text_deduplication():
     # Make the formula longer than 15 chars to trigger the heavily-repeated filter
     raw_text = "Heading 1\nHeading 1\nData 1\nFormula A = B + C\nFormula A = B + C\nFormula A = B + C\nData 2\nFormula A = B + C"
     cleaned = clean_text(raw_text)
-    # Consecutive duplicates should be removed, and heavily repeated lines removed
-    assert "Heading 1\nData 1\nData 2" in cleaned
-    assert "Formula A = B + C" not in cleaned # repeated 4 times, removed
+    # Consecutive duplicates should be removed, but non-consecutive kept
+    assert "Heading 1\nData 1" in cleaned
+    # We should have two instances of 'Formula A = B + C' since the last one is not consecutive
+    assert cleaned.count("Formula A = B + C") == 2
 
 def test_arabic_pdf_extraction():
     arabic_text = "هذا نص عربي للاختبار."

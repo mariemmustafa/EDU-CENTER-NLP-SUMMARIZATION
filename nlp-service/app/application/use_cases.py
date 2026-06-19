@@ -92,7 +92,7 @@ class SummarizeDocumentUseCase:
         # 8. Build response
         summary_length = len(cleaned_summary)
         compression_ratio = (
-            round(1 - (summary_length / original_length), 4)
+            max(0.0, round(1 - (summary_length / original_length), 4))
             if original_length > 0
             else 0.0
         )

@@ -1,5 +1,7 @@
 import asyncio
 import sys
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding='utf-8')
 
 from app.infrastructure.providers.huggingface_provider import HuggingFaceProvider
 from app.services.summarization_service import SummarizationService
@@ -20,14 +22,37 @@ async def test_summarization():
     
     english_text = "Artificial intelligence (AI) is intelligence demonstrated by machines, as opposed to the natural intelligence displayed by animals including humans. Leading AI textbooks define the field as the study of intelligent agents: any system that perceives its environment and takes actions that maximize its chance of achieving its goals. Some popular accounts use the term artificial intelligence to describe machines that mimic cognitive functions that humans associate with the human mind, such as learning and problem solving. " * 5
     
-    print("Testing English text summarization...")
+    import time
+    print("\n--- Testing English text summarization ---")
+    start = time.time()
     en_summary = await service.summarize(text=english_text, lang="en")
-    print(f"English Summary: {en_summary}\n")
+    elapsed = time.time() - start
+    
+    in_len = len(english_text)
+    out_len = len(en_summary)
+    ratio = round((1 - out_len / in_len) * 100, 2) if in_len > 0 else 0
+    
+    print(f"Execution time: {elapsed:.2f} seconds")
+    print(f"Input length: {in_len} characters")
+    print(f"Summary length: {out_len} characters")
+    print(f"Compression ratio: {ratio}%")
+    print(f"Generated Summary Example:\n{en_summary}\n")
     
     arabic_text = "الذكاء الاصطناعي هو سلوك وخصائص معينة تتسم بها البرامج الحاسوبية تجعلها تحاكي القدرات الذهنية البشرية وأنماط عملها. من أهم هذه الخاصيات القدرة على التعلم والاستنتاج ورد الفعل على أوضاع لم تبرمج في الآلة. " * 5
-    print("Testing Arabic text summarization...")
+    print("--- Testing Arabic text summarization ---")
+    start = time.time()
     ar_summary = await service.summarize(text=arabic_text, lang="ar")
-    print(f"Arabic Summary: {ar_summary}\n")
+    elapsed = time.time() - start
+    
+    in_len = len(arabic_text)
+    out_len = len(ar_summary)
+    ratio = round((1 - out_len / in_len) * 100, 2) if in_len > 0 else 0
+    
+    print(f"Execution time: {elapsed:.2f} seconds")
+    print(f"Input length: {in_len} characters")
+    print(f"Summary length: {out_len} characters")
+    print(f"Compression ratio: {ratio}%")
+    print(f"Generated Summary Example:\n{ar_summary}\n")
     print("Verification completed successfully.")
 
 if __name__ == "__main__":
