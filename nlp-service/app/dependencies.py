@@ -40,8 +40,9 @@ async def initialize_dependencies():
 
     # --- Primary provider (HuggingFace for English) ---
     _primary_provider = create_provider(settings.summarization_provider)
-    if hasattr(_primary_provider, "load_model"):
-        await _primary_provider.load_model()
+    # Removing eager load so uvicorn can bind to the port immediately for Railway's health check
+    # if hasattr(_primary_provider, "load_model"):
+    #     await _primary_provider.load_model()
 
     # --- OpenAI provider (loaded eagerly when API key is present) ---
     if settings.openai_api_key:
