@@ -87,11 +87,11 @@ class HuggingFaceProvider(SummarizationProvider):
                 inputs["input_ids"],
                 max_length=max_len,
                 min_length=min_len,
-                num_beams=4,
+                num_beams=2,
                 length_penalty=1.0,
                 early_stopping=True,
                 do_sample=False,
-                repetition_penalty=1.3,
+                repetition_penalty=1.8,
                 no_repeat_ngram_size=4,
             )
 
